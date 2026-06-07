@@ -1,1 +1,0 @@
-# TODO : Here will be all of the SQL querries for the back end data management
