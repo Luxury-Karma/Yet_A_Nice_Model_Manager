@@ -4,10 +4,9 @@
 This module handles dynamic 3D asset format validation via signature parsing.
 """
 import os
-import sys
 from os import walk
 from tqdm import tqdm
-from os.path import splitext, join
+from os.path import splitext, join, getsize, isfile, isdir
 from struct import unpack
 import json
 import zipfile
@@ -82,7 +81,7 @@ def __detect_by_magic_bytes(path: str) -> str | None:
 
     # Check for Binary STL: A true binary STL is exactly: 80 bytes (header) + 4 bytes (uint32 count) + (triangles * 50 bytes)
     try:
-        file_size = os.path.getsize(path)
+        file_size = getsize(path)
         if file_size >= 84:
             with open(path, "rb") as f:
                 f.seek(80)
@@ -120,7 +119,7 @@ def __detect_3d_file_type(path: str) -> str | None:
     Public API engine to detect 3D file formats safely.
     Uses layered verification to filter out masquerading files.
     """
-    if not os.path.isfile(path):
+    if not isfile(path):
         return None
 
     # Layer 1: Check signature bytes
@@ -152,7 +151,7 @@ def find_all_stl_file_from_directory(directory: str) -> dict[str, str]:
     """
     discovered_assets: dict[str, str] = {}
 
-    if not os.path.isdir(directory):
+    if not isdir(directory):
         return discovered_assets
 
     for root, dirs, filenames in walk(directory):
