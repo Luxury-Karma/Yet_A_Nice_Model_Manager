@@ -1,138 +1,143 @@
-from os import walk
+"""
+@Project: modual/file_finder.py
+@Author: Alexandre Gauvin (Optimized Setup)
+This module handles dynamic 3D asset format validation via signature parsing.
+"""
+import os
 from os.path import splitext
 from struct import unpack
-from json import load
+import json
+import zipfile
+
 SUPPORTED_3D_FORMATS: set[str] = {
-    # Mesh / printing
-    "stl", "obj", "3mf", "ply",
-
-    # CAD
-    "step", "stp", "iges", "igs", "dxf", "dwg",
-
-    # Real-time / scene
-    "fbx", "gltf", "glb", "dae", "usd", "usda", "usdc", "usdz",
-
-    # Point clouds / scan
-    "xyz", "las", "laz", "e57", "pcd",
-
-    # Legacy
-    "3ds", "off", "wrl", "wrz", "amf"
+    "stl", "obj", "3mf", "ply", "step", "stp", "iges", "igs", "dxf", "dwg",
+    "fbx", "gltf", "glb", "dae", "usd", "usda", "usdc", "usdz", "xyz", "las",
+    "laz", "e57", "pcd", "3ds", "off", "wrl", "wrz", "amf"
 }
 
 
 def __is_obj(path: str) -> bool:
-    """
-    This is a special case, verify if it is actually a obj file
-    :param path: str : file path to inspect
-    :return:
-    """
-    with open(path, "r", errors="ignore") as f:
-        for _ in range(10):
-            line = f.readline()
-            if line.startswith("v ") or line.startswith("f "):
-                return True
+    """Verify if a file is an ASCII Wavefront OBJ by looking for structural markers."""
+    try:
+        with open(path, "r", errors="ignore") as f:
+            for _ in range(30):  # Scan up to 30 lines in case comments are at the top
+                line = f.readline().strip()
+                if not line or line.startswith("#"):
+                    continue
+                # Real OBJ files declare vertices (v) or faces (f) immediately
+                if line.startswith(("v ", "f ", "vt ", "vn ")):
+                    return True
+    except Exception:
+        return False
     return False
 
 
-def __is_gltf(path: str):
-    """
-     special case, this file is more like a group of files. This verify if if it a gltf
-    :param path: str : file path to inspect
-    :return:
-    """
+def __is_gltf(path: str) -> bool:
+    """Verify if a file is a valid JSON-based glTF archive."""
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = load(f)
-        return "asset" in data and "meshes" in data
-    except:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            data = json.load(f)
+        return "asset" in data and ("meshes" in data or "nodes" in data)
+    except Exception:
         return False
 
 
 def __detect_by_magic_bytes(path: str) -> str | None:
     """
-    detect file type by bytes. More reliable then the file extension
-    :param path: str : file path to inspect
-    :return: extension if there is or None if not valid file
+    Detect file types by reading exact byte arrays (Signatures).
+    Highly resilient against altered or missing file extensions.
     """
-    with open(path, "rb") as f:
-        header = f.read(256)
+    try:
+        with open(path, "rb") as f:
+            header = f.read(128)  # Grab a structured byte block
+    except IOError:
+        return None
 
-    # STL (binary STL starts with 80-byte header then uint32)
-    if len(header) > 84:
-        tri_count = unpack("<I", header[80:84])[0]
-        if tri_count > 0:
-            return "stl"
+    if len(header) < 4:
+        return None
 
-    # 3MF (ZIP container with special structure)
-    if header.startswith(b"PK"):
-        if b"[Content_Types].xml" in header:
-            return "3mf"
-        # could also be gltf/zip-based formats
+    # 1. Zip Container Formats (3MF, USDZ)
+    if header.startswith(b"PK\x03\x04"):
+        # Instead of guessing bytes, let Python natively read the lightweight archive table
+        try:
+            if zipfile.is_zipfile(path):
+                with zipfile.ZipFile(path, 'r') as z:
+                    namelist = z.namelist()
+                    # 3MF Specification standard requires [Content_Types].xml and a .model file
+                    if any("[Content_Types].xml" in name for name in namelist):
+                        return "3mf"
+                    if any(name.endswith((".usd", ".usda", ".usdc")) for name in namelist):
+                        return "usdz"
+        except Exception:
+            pass
+        return None  # It's a regular zip file, not a 3D model
 
-    # PLY
+    # 2. STL Verification (ASCII vs Binary)
+    # Check for ASCII STL text marker first
+    if header.startswith(b"solid"):
+        return "stl"
+
+    # Check for Binary STL: A true binary STL is exactly: 80 bytes (header) + 4 bytes (uint32 count) + (triangles * 50 bytes)
+    try:
+        file_size = os.path.getsize(path)
+        if file_size >= 84:
+            with open(path, "rb") as f:
+                f.seek(80)
+                tri_count = unpack("<I", f.read(4))[0]
+            # Calculate expected file size math to verify it's a real STL
+            expected_size = 80 + 4 + (tri_count * 50)
+            if tri_count > 0 and file_size == expected_size:
+                return "stl"
+    except Exception:
+        pass
+
+    # 3. Standard 3D File Magic Byte Signatures
     if header.startswith(b"ply"):
         return "ply"
-
-    # FBX (binary)
     if header.startswith(b"Kaydara FBX Binary"):
         return "fbx"
-
-    # GLB (binary glTF)
-    if header[:4] == b"glTF":
+    if header.startswith(b"glTF"):
         return "glb"
-
-    # USDZ (ZIP container)
-    if header.startswith(b"PK") and b"USD" in header:
-        return "usdz"
-
-    # LAS point cloud
-    if header[:4] == b"LASF":
+    if header.startswith(b"LASF"):
         return "las"
 
     return None
 
 
-def __detect_by_extension(path:str) -> str | None:
-    """
-    Basic detection base on the type format. Could be trick but is a fall back
-    :param path: str : file path to inspect
-    :return: extension if there is or None if not valid file
-    """
+def __detect_by_extension(path: str) -> str | None:
+    """Fallback extension check if magic bytes are inconclusive."""
     ext = splitext(path)[1].lower().strip(".")
-    ext = str(ext)
-    KNOWN_3D = SUPPORTED_3D_FORMATS
-    if ext in KNOWN_3D:
+    if ext in SUPPORTED_3D_FORMATS:
         return ext
     return None
 
 
-def __detect_3d_file_type(path: str) -> str | None:
+def detect_3d_file_type(path: str) -> str | None:
     """
-    attempt to detect 3d file type
-    :param path: str : file path to inspect
-    :return: extension if there is or None if not valid file
+    Public API engine to detect 3D file formats safely.
+    Uses layered verification to filter out masquerading files.
     """
-    # 1. magic bytes first (most reliable)
+    if not os.path.isfile(path):
+        return None
+
+    # Layer 1: Check signature bytes
     magic = __detect_by_magic_bytes(path)
     if magic:
         return magic
 
-    # 2. extension guess
+    # Layer 2: Fall back to extension evaluation
     ext = __detect_by_extension(path)
     if not ext:
         return None
 
-    # 3. validation layer (IMPORTANT FIX)
-    # ensures OBJ / GLTF are real, not just renamed files
+    # Layer 3: Validation layer for abstract text formats
     if ext == "obj":
         return "obj" if __is_obj(path) else None
 
     if ext in {"gltf"}:
         return "gltf" if __is_gltf(path) else None
 
-    # everything else accepted by extension
     return ext
-
 
 # TODO: next step is how we search. So are we searching the full device ( long ) a specific directory, file, or mount
 # We will need to add UI for this but this should be easy and update automatically once in a while
