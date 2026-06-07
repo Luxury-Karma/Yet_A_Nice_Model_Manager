@@ -4,7 +4,10 @@
 This module handles dynamic 3D asset format validation via signature parsing.
 """
 import os
-from os.path import splitext
+import sys
+from os import walk
+from tqdm import tqdm
+from os.path import splitext, join
 from struct import unpack
 import json
 import zipfile
@@ -112,7 +115,7 @@ def __detect_by_extension(path: str) -> str | None:
     return None
 
 
-def detect_3d_file_type(path: str) -> str | None:
+def __detect_3d_file_type(path: str) -> str | None:
     """
     Public API engine to detect 3D file formats safely.
     Uses layered verification to filter out masquerading files.
@@ -141,3 +144,89 @@ def detect_3d_file_type(path: str) -> str | None:
 
 # TODO: next step is how we search. So are we searching the full device ( long ) a specific directory, file, or mount
 # We will need to add UI for this but this should be easy and update automatically once in a while
+
+
+def find_all_stl_file_from_directory(directory: str) -> dict[str, str]:
+    """
+    Recursively search this directory for 3D models files with optimized pre-filtering.
+    """
+    discovered_assets: dict[str, str] = {}
+
+    if not os.path.isdir(directory):
+        return discovered_assets
+
+    for root, dirs, filenames in walk(directory):
+        for filename in filenames:
+            # 1. PERF WIN: Check extension directly from the string path FIRST
+            ext = splitext(filename)[1].lower().strip(".")
+
+            # If it's a log file, text file, system file, etc., skip it IMMEDIATELY
+            # without ever opening it on the drive!
+            if ext not in SUPPORTED_3D_FORMATS:
+                continue
+
+            full_path = join(root, filename)
+
+            try:
+                # 2. Deep Validation: Only open files that claim to be 3D models
+                file_type = __detect_3d_file_type(full_path)
+
+                if isinstance(file_type, str):
+                    discovered_assets[full_path] = file_type
+            except (PermissionError, FileNotFoundError):
+                continue
+    return discovered_assets
+
+
+
+def find_all_stl_files_tqdm(directory: str) -> dict[str, str]:
+    discovered_assets: dict[str, str] = {}
+
+    print("🚀 Booting high-velocity asset crawler...")
+
+    # We initialize an un-bounded manual progress bar context manager
+    with tqdm(unit=" files", desc="🕵️ Crawling Storage Drive", colour="cyan") as pbar:
+        for root, dirs, filenames in walk(directory):
+            for filename in filenames:
+
+                # Update the progress bar counter by 1 for every file observed
+                pbar.update(1)
+
+                ext = splitext(filename)[1].lower().strip(".")
+                if ext not in SUPPORTED_3D_FORMATS:
+                    continue
+
+                full_path = join(root, filename)
+                try:
+                    file_type = __detect_3d_file_type(full_path)
+                    if isinstance(file_type, str):
+                        discovered_assets[full_path] = file_type
+
+                        # Set custom dynamic text status tags on the far right of the loading bar!
+                        pbar.set_postfix({"Found Models": len(discovered_assets)})
+                except (PermissionError, FileNotFoundError):
+                    continue
+
+    return discovered_assets
+
+
+def get_file_model(path:str) -> tuple[str, str] | tuple[None, None]:
+    """
+    Verify if single file is a 3D model file.
+    :param path: path to file
+    :return: path and type if valid file else None, None
+    """
+    file_type = __detect_3d_file_type(path)
+
+    if not isinstance(file_type, str):
+        return None, None
+
+    return path, file_type
+
+
+
+
+if __name__ == "__main__":
+    print('testing the file detector...')
+    all_files = find_all_stl_files_tqdm('D:\\wh40k')
+    print(all_files)
