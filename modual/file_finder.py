@@ -10,6 +10,10 @@ from os.path import splitext, join, getsize, isfile, isdir
 from struct import unpack
 import json
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import platform
+import re
+from subprocess import check_output
 
 SUPPORTED_3D_FORMATS: set[str] = {
     "stl", "obj", "3mf", "ply", "step", "stp", "iges", "igs", "dxf", "dwg",
@@ -141,48 +145,56 @@ def __detect_3d_file_type(path: str) -> str | None:
 
     return ext
 
-# TODO: next step is how we search. So are we searching the full device ( long ) a specific directory, file, or mount
-# We will need to add UI for this but this should be easy and update automatically once in a while
-
 
 def find_all_stl_file_from_directory(directory: str) -> dict[str, str]:
     """
-    Recursively search this directory for 3D models files with optimized pre-filtering.
+    Recursively search this directory for 3D models using a high-performance
+    concurrent ThreadPool to validate magic bytes at maximum disk I/O speeds.
     """
     discovered_assets: dict[str, str] = {}
 
     if not isdir(directory):
         return discovered_assets
 
+    # STEP 1: Rapid Path Gathering
+    # Collect all potential candidate paths first without opening them
+    candidates = []
     for root, dirs, filenames in walk(directory):
         for filename in filenames:
-            # 1. PERF WIN: Check extension directly from the string path FIRST
             ext = splitext(filename)[1].lower().strip(".")
+            if ext in SUPPORTED_3D_FORMATS:
+                candidates.append(join(root, filename))
 
-            # If it's a log file, text file, system file, etc., skip it IMMEDIATELY
-            # without ever opening it on the drive!
-            if ext not in SUPPORTED_3D_FORMATS:
-                continue
+    if not candidates:
+        return discovered_assets
 
-            full_path = join(root, filename)
+    # STEP 2: Concurrent Header Verification
+    # File I/O operations benefit from a high worker count (e.g., 32 concurrent reads)
+    max_threads = min(32, (os.cpu_count() or 1) * 4)
 
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        # Submit all candidates to the validation engine
+        future_to_path = {
+            executor.submit(__detect_3d_file_type, path): path
+            for path in candidates
+        }
+
+        # As files finish being read, collect valid ones immediately
+        for future in as_completed(future_to_path):
+            path = future_to_path[future]
             try:
-                # 2. Deep Validation: Only open files that claim to be 3D models
-                file_type = __detect_3d_file_type(full_path)
-
+                file_type = future.result()
                 if isinstance(file_type, str):
-                    discovered_assets[full_path] = file_type
-            except (PermissionError, FileNotFoundError):
-                continue
+                    discovered_assets[path] = file_type
+            except Exception:
+                pass  # Silently ignore unreadable/locked files
+
     return discovered_assets
 
 
 
 def find_all_stl_files_tqdm(directory: str) -> dict[str, str]:
     discovered_assets: dict[str, str] = {}
-
-    print("🚀 Booting high-velocity asset crawler...")
-
     # We initialize an un-bounded manual progress bar context manager
     with tqdm(unit=" files", desc="🕵️ Crawling Storage Drive", colour="cyan") as pbar:
         for root, dirs, filenames in walk(directory):
@@ -222,7 +234,70 @@ def get_file_model(path:str) -> tuple[str, str] | tuple[None, None]:
 
     return path, file_type
 
+def __get_system_drive() -> list[str]:
+    """
+    Retrieve all root folders in both windows and linux environment.
+    :return: the list of root folder strings ('C:\\', '/media', etc.)
+    """
+    current_os = platform.system()
+    if current_os == 'Windows':
+        try:
+            reg = r"([a-zA-Z]:\\)"  # Match the full root string (letter + : + \)
+            drive_list = re.findall(reg, check_output('fsutil fsinfo drives', shell=True).decode())
+            return [d.strip() for d in drive_list if os.path.exists(d.strip())]
+        except Exception as e:
+            # Fallback if execution environment lacks administrative permissions
+            import string
+            return [f"{letter}:\\" for letter in string.ascii_uppercase if os.path.exists(f"{letter}:\\")]
 
+    # Linux environment fallback
+    home_path = os.path.expanduser('~')
+    mount_points = ["/media", "/mnt", home_path]
+    return [pt for pt in mount_points if os.path.exists(pt)]
+
+
+def __scan_drive_for_folder(drive: str, directory_name: str, directory_content: set[str]) -> str | None:
+    """
+    Scan a single drive to find a specific folder using its subfolders information.
+    :param drive: What Drive to scan ( C:\\, /mnt ... )
+    :param directory_name: what is the folder name
+    :param directory_content: what is the folder content blueprint
+    :return: path to the folder if present
+    """
+    for root, dirs, files in os.walk(drive):
+        if os.path.basename(root) == directory_name:
+            try:
+                set_of_files = set(os.listdir(root))
+
+                # FIX: Verify the frontend fingerprint is a subset of the actual drive directory
+                if directory_content.issubset(set_of_files):
+                    return root  # FIX: root IS the path to the folder, don't double join it!
+            except Exception:
+                pass
+    return None
+
+
+def find_specific_directory(directory_name: str, directory_content: list[str]) -> str | None:
+    """
+    Launch asynchronous search through every drive to locate a specific folder.
+    :param directory_name: name of the folder searched
+    :param directory_content: content of the folder searched
+    :return: path to the folder if present
+    """
+    drive_list = __get_system_drive()
+    directory_content_set = set(directory_content)
+
+    with ThreadPoolExecutor(max_workers=len(drive_list)) as executor:
+        future_drive = {
+            executor.submit(__scan_drive_for_folder, drive, directory_name, directory_content_set)
+            for drive in drive_list
+        }
+        for future in as_completed(future_drive):
+            result = future.result()
+            if result:
+                return result
+
+    return None
 
 
 if __name__ == "__main__":
