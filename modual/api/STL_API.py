@@ -25,7 +25,16 @@ def test():
 
 @app.route('/get_stl', methods=['GET'])
 def get_stl_list():
-    """Retrieves the indexed list of all models from the SQL database to populate the UI."""
+    """
+    This function is returning the file so the web server can show both the file and the name
+    :return: {
+    "id": file id,
+    "file_name": file name,
+    "file_path": file path,
+    "file_size": file size,
+    "tags": tags,
+    }, 200 if successful. Else error code
+    """
     db = session_local()
     try:
         db_models = db.query(model).all()
@@ -41,7 +50,6 @@ def get_stl_list():
                 "file_path": item.file_path or "",
                 "file_size": item.file_size or 0,
                 "tags": tag_names,
-                "mock_image_url": f"https://picsum.photos/seed/{item.id}/300/200"
             })
         return jsonify(payload), 200
     except Exception as e:
@@ -52,41 +60,49 @@ def get_stl_list():
 
 
 @app.route('/fetch-model', methods=['POST'])
+
 def fetch_model():
     """
-    This function is use for testing and testing only it need to not be in the end version. The UI should not be
-    requesting files directly. we should be giving it what it need
-    :return:
+    Secure production-grade model streaming endpoint.
+    Verifies that the file path exists inside the untampered SQL database before
+    streaming bytes to ensure clients cannot access arbitrary system directories.
     """
-    print('model fetch requested')
-    MODEL_DATABASE = {
-        "1": r"D:\wh40k\space_marines\lt-titus\one_piece.stl",
-        "2": r"D:\wh40k\space_marines\another-marine.stl"
-    }
     data = request.get_json()
 
-    # 1. Validate that the request has JSON data
+    # 1. Validate incoming request body structure
     if not data or 'model_id' not in data:
         return jsonify({"error": "Missing model_id in request body"}), 400
 
-    model_id = str(data['model_id'])
-    print(model_id)
+    model_id = data['model_id']
+    print(f"📦 [VERIFYING] Client requested binary stream for Model ID: {model_id}")
 
-    # 2. Check if the ID exists in our allowed map
-    if model_id not in MODEL_DATABASE:
-        print('did not work')
-        return jsonify({"error": "Model not found or access denied"}), 00
+    db = session_local()
+    try:
+        # 2. Query the DB using your SQLAlchemy model class to verify existence
+        target_model = db.query(model).filter(model.id == model_id).first()
 
-    actual_path = MODEL_DATABASE[model_id]
+        if not target_model:
+            print(f"⚠️ [SECURITY ALERT] Requested Model ID {model_id} does not exist in the database.")
+            return jsonify({"error": "Access denied or invalid model context."}), 403
 
-    # 3. Verify the file physically exists on the OS before trying to send it
-    if not os.path.exists(actual_path):
-        print('file did not exist')
-        return jsonify({"error": "File missing on server drive"}), 404
+        # 3. FIX: Your crawler already stores the complete absolute path inside 'file_path'
+        actual_path = target_model.file_path
+        print(f"🔗 [PATH RESOLVED] Target path from database record: {actual_path}")
 
-    # Python safely streams the file data back to the browser
-    print('sent')
-    return send_file(actual_path, as_attachment=True)
+        # 4. Verify that the file physically exists on the OS drive
+        if not os.path.exists(actual_path):
+            print(f"❌ [IO ERROR] Database has record, but file is missing from drive: {actual_path}")
+            return jsonify({"error": "File missing on server drive"}), 404
+
+        # 5. Safe, validated binary file transmission
+        print(f"🚀 [STREAMING] Sending verified bytes for {target_model.file_name}")
+        return send_file(actual_path, as_attachment=True)
+
+    except Exception as e:
+        print(f"❌ [SERVER ERROR] Error processing file validation loop: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 def run_background_sync(target_directory):
     """Worker function tasked with performing the heavy storage drive crawling pass."""

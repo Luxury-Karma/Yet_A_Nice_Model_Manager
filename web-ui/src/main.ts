@@ -7,6 +7,15 @@ import * as Three from 'three';
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+// Define the exact structural typing coming from Flask's /get_stl payload
+interface DBModelItem {
+    id: number;
+    file_name: string;
+    file_path: string;
+    file_size: number;
+    tags: string[];
+}
+
 export class ModelViewer {
     private scene!: Three.Scene;
     private camera!: Three.PerspectiveCamera;
@@ -15,7 +24,6 @@ export class ModelViewer {
     private meshesToAnimate: Three.Mesh[] = [];
     private canvasElement: HTMLCanvasElement;
 
-    // Flag to track if the user has touched/moved the model with their mouse
     private isMoved: boolean = false;
 
     constructor(canvas: HTMLCanvasElement) {
@@ -26,29 +34,28 @@ export class ModelViewer {
 
     private initThree(): void {
         this.scene = new Three.Scene();
-        this.scene.background = new Three.Color(0x1a1a1a);
+        // Match background color subtly to card environments
+        this.scene.background = new Three.Color(0x0f0f11);
 
-        const width = this.canvasElement.clientWidth || 400;
-        const height = this.canvasElement.clientHeight || 400;
+        // Dynamically measure parent sizes mapped out by style.css bounding rules
+        const width = this.canvasElement.clientWidth || 260;
+        const height = this.canvasElement.clientHeight || 180;
 
-        this.camera = new Three.PerspectiveCamera(75, width / height, 0.1, 1000);
+        this.camera = new Three.PerspectiveCamera(60, width / height, 0.1, 1000);
         this.camera.position.set(0, 0, 5);
 
         this.renderer = new Three.WebGLRenderer({ canvas: this.canvasElement, antialias: true });
         this.renderer.setSize(width, height);
 
-        // Initialize Controls
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
 
-        // --- INTERACTION EVENT LISTENERS ---
-        // 'start' fires the exact millisecond the user clicks/drags on the canvas
         this.controls.addEventListener('start', () => {
             this.isMoved = true;
         });
 
-        const ambientLight = new Three.AmbientLight(0x404040, 2);
+        const ambientLight = new Three.AmbientLight(0x404040, 2.5);
         this.scene.add(ambientLight);
 
         const dirLight1 = new Three.DirectionalLight(0xffffff, 3);
@@ -89,11 +96,21 @@ export class ModelViewer {
                     const loadedModel = new Three.Mesh(geometry, material);
 
                     geometry.center();
-                    loadedModel.scale.set(0.1, 0.1, 0.1);
+
+                    // Automatically compute sizing normalization matrices
+                    // so gigantic and tiny STLs fit nicely in their cards
+                    geometry.computeBoundingBox();
+                    const boundingBox = geometry.boundingBox;
+                    if (boundingBox) {
+                        const size = new Three.Vector3();
+                        boundingBox.getSize(size);
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        const scaleFactor = 3.2 / maxDim;
+                        loadedModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+                    }
 
                     this.scene.add(loadedModel);
                     this.meshesToAnimate.push(loadedModel);
-                    console.log(`Model ID ${modelId} successfully received from API and rendered!`);
 
                     URL.revokeObjectURL(blobUrl);
                 },
@@ -109,7 +126,6 @@ export class ModelViewer {
     private animate = (): void => {
         requestAnimationFrame(this.animate);
 
-        // ONLY auto-rotate if the user hasn't interacted with it yet
         if (!this.isMoved) {
             this.meshesToAnimate.forEach((mesh) => {
                 mesh.rotation.y += 0.01;
@@ -121,10 +137,53 @@ export class ModelViewer {
     }
 }
 
-// --- SINGLE MODEL TESTING BLOCK ---
-const canvasElement = document.querySelector('#webgl-canvas') as HTMLCanvasElement;
+// --- DYNAMIC INVENTORY CONSTRUCTOR ---
+async function buildInventoryGrid(): Promise<void> {
+    const gridContainer = document.querySelector('#inventory-grid');
+    if (!gridContainer) return;
 
-if (canvasElement) {
-    const singleTestViewer = new ModelViewer(canvasElement);
-    singleTestViewer.loadSTL(1);
+    try {
+        // Step 1: Grab the untampered database layout definition list
+        const response = await fetch('http://127.0.0.1:5000/get_stl');
+        if (!response.ok) throw new Error("Could not reach DB endpoint.");
+
+        const stlItems: DBModelItem[] = await response.json();
+
+        // Step 2: Draw the layout elements instantly using style.css rules
+        stlItems.forEach((item) => {
+            const cardNode = document.createElement('div');
+            cardNode.className = 'model-card';
+
+            cardNode.innerHTML = `
+                <div class="image-container">
+                    <canvas id="canvas-viewer-${item.id}" style="width: 100%; height: 100%; display: block;"></canvas>
+                </div>
+                <div class="model-title" title="${item.file_name}">${item.file_name}</div>
+                <div style="font-size: 0.85rem; color: #a0aec0; margin-bottom: 1rem;">
+                    Size: ${(item.file_size / (1024 * 1024)).toFixed(2)} MB
+                </div>
+                <div class="tag-container">
+                    ${item.tags.map(tag => `<span class="label-tag" style="background-color: #2b6cb0;">${tag}</span>`).join('')}
+                </div>
+            `;
+
+            gridContainer.appendChild(cardNode);
+
+            // Step 3: Trigger the independent 3D renderer per card to fetch its verified binary
+            const targetCanvas = document.getElementById(`canvas-viewer-${item.id}`) as HTMLCanvasElement;
+            if (targetCanvas) {
+                const viewer = new ModelViewer(targetCanvas);
+                viewer.loadSTL(item.id); // This requests the secure stream by its verified database ID
+            }
+        });
+
+    } catch (error) {
+        console.error("Failed to construct catalog list layout view grids:", error);
+    }
+}
+// Attach listener lifecycle initializers
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', buildInventoryGrid);
+} else {
+    buildInventoryGrid();
 }
