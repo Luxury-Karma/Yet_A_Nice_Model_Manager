@@ -302,5 +302,6 @@ def find_specific_directory(directory_name: str, directory_content: list[str]) -
 
 if __name__ == "__main__":
     print('testing the file detector...')
-    all_files = find_all_stl_files_tqdm('D:\\wh40k')
-    print(all_files)
+    all_files = find_all_stl_files_tqdm(r'D:\wh40k\Shoulder_Pads')
+    for e in all_files:
+        print(e)

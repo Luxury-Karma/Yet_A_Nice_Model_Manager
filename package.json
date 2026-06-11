@@ -11,6 +11,10 @@
   "license": "ISC",
   "type": "module",
   "devDependencies": {
+    "@types/three": "^0.184.1",
     "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "three": "^0.184.0"
   }
 }

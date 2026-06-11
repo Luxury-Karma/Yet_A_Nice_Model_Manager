@@ -7,7 +7,7 @@ Handles request routing frameworks for rendering or updating 3D asset tables wit
 import os
 import sys
 import threading
-from flask import request, Flask, jsonify
+from flask import request, Flask, jsonify, send_file
 from flask_cors import CORS
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from modual.sql.session_creator import session_local
@@ -50,6 +50,43 @@ def get_stl_list():
     finally:
         db.close()
 
+
+@app.route('/fetch-model', methods=['POST'])
+def fetch_model():
+    """
+    This function is use for testing and testing only it need to not be in the end version. The UI should not be
+    requesting files directly. we should be giving it what it need
+    :return:
+    """
+    print('model fetch requested')
+    MODEL_DATABASE = {
+        "1": r"D:\wh40k\space_marines\lt-titus\one_piece.stl",
+        "2": r"D:\wh40k\space_marines\another-marine.stl"
+    }
+    data = request.get_json()
+
+    # 1. Validate that the request has JSON data
+    if not data or 'model_id' not in data:
+        return jsonify({"error": "Missing model_id in request body"}), 400
+
+    model_id = str(data['model_id'])
+    print(model_id)
+
+    # 2. Check if the ID exists in our allowed map
+    if model_id not in MODEL_DATABASE:
+        print('did not work')
+        return jsonify({"error": "Model not found or access denied"}), 00
+
+    actual_path = MODEL_DATABASE[model_id]
+
+    # 3. Verify the file physically exists on the OS before trying to send it
+    if not os.path.exists(actual_path):
+        print('file did not exist')
+        return jsonify({"error": "File missing on server drive"}), 404
+
+    # Python safely streams the file data back to the browser
+    print('sent')
+    return send_file(actual_path, as_attachment=True)
 
 def run_background_sync(target_directory):
     """Worker function tasked with performing the heavy storage drive crawling pass."""

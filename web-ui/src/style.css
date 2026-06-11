@@ -1,4 +1,4 @@
-body {
+/*body {
     background-color: #121214;
     color: #e2e8f0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -44,10 +44,10 @@ header p {
 .model-card:hover {
     transform: translateY(-4px);
     border-color: #4299e1;
-}
+} */
 
 /* Mock Image Container */
-.image-container {
+/*.image-container {
     width: 100%;
     height: 180px;
     background-color: #0f0f11;
@@ -60,10 +60,10 @@ header p {
     width: 100%;
     height: 100%;
     object-fit: cover;
-}
+}*/
 
 /* Text & Labels Elements */
-.model-title {
+/*.model-title {
     font-size: 1.1rem;
     font-weight: 600;
     color: #edf2f7;
@@ -89,4 +89,5 @@ header p {
     border-radius: 6px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-}
+} This was enough for the square inventory style*/
+
