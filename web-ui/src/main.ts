@@ -5,13 +5,18 @@
  */
 import * as Three from 'three';
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 export class ModelViewer {
     private scene!: Three.Scene;
     private camera!: Three.PerspectiveCamera;
     private renderer!: Three.WebGLRenderer;
+    private controls!: OrbitControls;
     private meshesToAnimate: Three.Mesh[] = [];
     private canvasElement: HTMLCanvasElement;
+
+    // Flag to track if the user has touched/moved the model with their mouse
+    private isMoved: boolean = false;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvasElement = canvas;
@@ -32,6 +37,17 @@ export class ModelViewer {
         this.renderer = new Three.WebGLRenderer({ canvas: this.canvasElement, antialias: true });
         this.renderer.setSize(width, height);
 
+        // Initialize Controls
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+
+        // --- INTERACTION EVENT LISTENERS ---
+        // 'start' fires the exact millisecond the user clicks/drags on the canvas
+        this.controls.addEventListener('start', () => {
+            this.isMoved = true;
+        });
+
         const ambientLight = new Three.AmbientLight(0x404040, 2);
         this.scene.add(ambientLight);
 
@@ -44,10 +60,8 @@ export class ModelViewer {
         this.scene.add(dirLight2);
     }
 
-// Change parameter from "modelPath" to "modelId"
     public async loadSTL(modelId: number): Promise<void> {
         try {
-            // 1. Hit your Flask endpoint with a POST request
             const response = await fetch('http://127.0.0.1:5000/fetch-model', {
                 method: 'POST',
                 headers: {
@@ -60,10 +74,7 @@ export class ModelViewer {
                 throw new Error(`Flask API responded with status: ${response.status}`);
             }
 
-            // 2. Extract the file as a raw binary Blob
             const fileBlob = await response.blob();
-
-            // 3. Convert the Blob into a temporary memory URL Three.js can ingest
             const blobUrl = URL.createObjectURL(fileBlob);
 
             const loader = new STLLoader();
@@ -84,7 +95,6 @@ export class ModelViewer {
                     this.meshesToAnimate.push(loadedModel);
                     console.log(`Model ID ${modelId} successfully received from API and rendered!`);
 
-                    // 4. Free up browser memory by cleaning up the temporary URL
                     URL.revokeObjectURL(blobUrl);
                 },
                 undefined,
@@ -95,13 +105,18 @@ export class ModelViewer {
             console.error("Failed to fetch model from backend API:", error);
         }
     }
+
     private animate = (): void => {
         requestAnimationFrame(this.animate);
 
-        this.meshesToAnimate.forEach((mesh) => {
-            mesh.rotation.y += 0.01;
-        });
+        // ONLY auto-rotate if the user hasn't interacted with it yet
+        if (!this.isMoved) {
+            this.meshesToAnimate.forEach((mesh) => {
+                mesh.rotation.y += 0.01;
+            });
+        }
 
+        this.controls.update();
         this.renderer.render(this.scene, this.camera);
     }
 }
@@ -110,11 +125,6 @@ export class ModelViewer {
 const canvasElement = document.querySelector('#webgl-canvas') as HTMLCanvasElement;
 
 if (canvasElement) {
-    // 1. Create one test instance of our class
     const singleTestViewer = new ModelViewer(canvasElement);
-
-    // 2. Load your local test file
-    // IMPORTANT: Make sure your local vite server is allowed to read this path,
-    // or temporarily move 'lt-titus.stl' into your /public folder and change this path to '/lt-titus.stl'
     singleTestViewer.loadSTL(1);
 }
