@@ -16,6 +16,10 @@ interface DBModelItem {
     tags: string[];
 }
 
+let currentPage: number = 0;
+let maxPage : number = 0;
+let maxAmount:number = 20;
+let pagesInformation: DBModelItem[][]
 export class ModelViewer {
     private scene!: Three.Scene;
     private camera!: Three.PerspectiveCamera;
@@ -137,20 +141,87 @@ export class ModelViewer {
     }
 }
 
-// --- DYNAMIC INVENTORY CONSTRUCTOR ---
-async function buildInventoryGrid(): Promise<void> {
-    const gridContainer = document.querySelector('#inventory-grid');
-    if (!gridContainer) return;
+// --- DB ---
 
-    try {
-        // Step 1: Grab the untampered database layout definition list
-        const response = await fetch('http://127.0.0.1:5000/get_stl');
+function splitDB(dbSplit:DBModelItem[]):DBModelItem[][]{
+    // Split STL in groups for performance
+        let grouping: DBModelItem[][] = [];
+
+        for (let i = 0; i < Math.ceil(dbSplit.length / maxAmount); i++) {
+            let temp_group: any[] = []
+            for (let j = 0; j < maxAmount; j++) {
+                let location: number = i * maxAmount + j
+                if (location > dbSplit.length) {
+                    break; // ensure we're done it may not be a multiple of the max amount
+                }
+                temp_group.push(dbSplit[location])
+            }
+            grouping.push(temp_group)
+        }
+        return grouping
+}
+
+async function getItemsInformation():Promise<DBModelItem[]>{
+        // Get the model DB from the backend
+        const response: Response = await fetch('http://127.0.0.1:5000/get_stl');
         if (!response.ok) throw new Error("Could not reach DB endpoint.");
 
-        const stlItems: DBModelItem[] = await response.json();
+        return  await response.json();
+}
 
-        // Step 2: Draw the layout elements instantly using style.css rules
-        stlItems.forEach((item) => {
+// --- Pages ---
+function renderCurrentPage(){
+    // TODO use the current location of the index to build the sector
+    buildInventoryGrid(pagesInformation[currentPage]);
+    buildPaginationControls()
+}
+// --- PAGES control ---
+function buildPaginationControls(){
+    const paginationContainer:HTMLElement | null = document.getElementById('pagination-controls');
+
+    if (!paginationContainer) return; // container not found
+
+    paginationContainer.innerHTML = ''; // cleaning
+
+    // Previous page
+    const prevBtn:HTMLButtonElement = document.createElement("button");
+    prevBtn.textContent = '◀';
+    prevBtn.disabled = currentPage === 0;
+    prevBtn.onclick = () => {
+        if(currentPage < 0){
+            return;
+        }
+        currentPage--;
+        renderCurrentPage();
+    }
+    paginationContainer.appendChild(prevBtn);
+
+    // next page
+    const nextBtn:HTMLButtonElement = document.createElement("button");
+    nextBtn.textContent = "▶";
+    nextBtn.disabled = currentPage === (maxPage-1);
+    nextBtn.onclick = () => {
+        if (currentPage >= maxPage-1){
+            return
+        }
+        currentPage++;
+        renderCurrentPage(); // TODO: make this function
+    }
+    paginationContainer.appendChild(nextBtn)
+
+}
+
+
+// --- INVENTORY ---
+async function buildInventoryGrid(grouping:DBModelItem[]): Promise<void> {
+    const gridContainer = document.querySelector('#inventory-grid');
+    if (!gridContainer) return;
+    gridContainer.innerHTML = ''; // clean
+    try {
+
+
+        // build visual inventory
+        grouping.forEach((item) => {
             const cardNode = document.createElement('div');
             cardNode.className = 'model-card';
 
@@ -169,7 +240,7 @@ async function buildInventoryGrid(): Promise<void> {
 
             gridContainer.appendChild(cardNode);
 
-            // Step 3: Trigger the independent 3D renderer per card to fetch its verified binary
+            // start the 3D rendering
             const targetCanvas = document.getElementById(`canvas-viewer-${item.id}`) as HTMLCanvasElement;
             if (targetCanvas) {
                 const viewer = new ModelViewer(targetCanvas);
@@ -181,9 +252,15 @@ async function buildInventoryGrid(): Promise<void> {
         console.error("Failed to construct catalog list layout view grids:", error);
     }
 }
+
+
 // Attach listener lifecycle initializers
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', buildInventoryGrid);
 } else {
-    buildInventoryGrid();
+    pagesInformation = splitDB(await getItemsInformation()); // Give us pages informations
+    maxPage = pagesInformation.length // give us how many pages present
+    renderCurrentPage() // show the page we are active on based on the page location and split db
+    // TODO: add search bar which over write anything then once empty go back to last page
+
 }

@@ -60,12 +60,13 @@ def get_stl_list():
 
 
 @app.route('/fetch-model', methods=['POST'])
-
 def fetch_model():
     """
-    Secure production-grade model streaming endpoint.
-    Verifies that the file path exists inside the untampered SQL database before
-    streaming bytes to ensure clients cannot access arbitrary system directories.
+    Give a specific model information
+    format :
+    {
+        "model_id": model id,
+    }
     """
     data = request.get_json()
 
@@ -78,14 +79,13 @@ def fetch_model():
 
     db = session_local()
     try:
-        # 2. Query the DB using your SQLAlchemy model class to verify existence
+        # 2. Query the DB to verify the model exist
         target_model = db.query(model).filter(model.id == model_id).first()
 
         if not target_model:
             print(f"⚠️ [SECURITY ALERT] Requested Model ID {model_id} does not exist in the database.")
             return jsonify({"error": "Access denied or invalid model context."}), 403
 
-        # 3. FIX: Your crawler already stores the complete absolute path inside 'file_path'
         actual_path = target_model.file_path
         print(f"🔗 [PATH RESOLVED] Target path from database record: {actual_path}")
 
