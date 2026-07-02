@@ -6,6 +6,7 @@
 import * as Three from 'three';
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import {String} from "three/examples/jsm/transpiler/AST";
 
 // Define the exact structural typing coming from Flask's /get_stl payload
 interface DBModelItem {
@@ -20,6 +21,8 @@ let currentPage: number = 0;
 let maxPage : number = 0;
 let maxAmount:number = 20;
 let pagesInformation: DBModelItem[][]
+let isShowModels: boolean = false;  // TODO make a user setting files and load it first
+
 export class ModelViewer {
     private scene!: Three.Scene;
     private camera!: Three.PerspectiveCamera;
@@ -140,6 +143,27 @@ export class ModelViewer {
         this.renderer.render(this.scene, this.camera);
     }
 }
+// -- Settings ---
+function showModels() {
+    const toggler: HTMLInputElement | null= document.getElementById('mySwitch') as HTMLInputElement;
+    if (!toggler){ return; } // container not found
+    // create slider
+    toggler.addEventListener('change', (event:Event) => {
+       const target:HTMLInputElement = event.target as HTMLInputElement;
+       if (target.checked){
+            isShowModels = true;
+            renderCurrentPage()
+       }
+       else {
+           isShowModels = false;
+           renderCurrentPage()
+       }
+    });
+
+
+
+}
+
 
 // --- DB ---
 
@@ -172,9 +196,10 @@ async function getItemsInformation():Promise<DBModelItem[]>{
 // --- Pages ---
 function renderCurrentPage(){
     // TODO use the current location of the index to build the sector
-    buildInventoryGrid(pagesInformation[currentPage]);
+    buildInventory(pagesInformation[currentPage]);
     buildPaginationControls()
 }
+
 // --- PAGES control ---
 function buildPaginationControls(){
     const paginationContainer:HTMLElement | null = document.getElementById('pagination-controls');
@@ -213,7 +238,10 @@ function buildPaginationControls(){
 
 
 // --- INVENTORY ---
-async function buildInventoryGrid(grouping:DBModelItem[]): Promise<void> {
+
+
+
+async function buildInventory(grouping:DBModelItem[]): Promise<void> {
     const gridContainer = document.querySelector('#inventory-grid');
     if (!gridContainer) return;
     gridContainer.innerHTML = ''; // clean
@@ -225,7 +253,7 @@ async function buildInventoryGrid(grouping:DBModelItem[]): Promise<void> {
             const cardNode = document.createElement('div');
             cardNode.className = 'model-card';
 
-            cardNode.innerHTML = `
+            let format:string = `
                 <div class="image-container">
                     <canvas id="canvas-viewer-${item.id}" style="width: 100%; height: 100%; display: block;"></canvas>
                 </div>
@@ -238,7 +266,25 @@ async function buildInventoryGrid(grouping:DBModelItem[]): Promise<void> {
                 </div>
             `;
 
+            if (!isShowModels){
+                format = `
+                <div class="model-title" title="${item.file_name}">${item.file_name}</div>
+                <div style="font-size: 0.85rem; color: #a0aec0; margin-bottom: 1rem;">
+                    Size: ${(item.file_size / (1024 * 1024)).toFixed(2)} MB
+                </div>
+                <div class="tag-container">
+                    ${item.tags.map(tag => `<span class="label-tag" style="background-color: #2b6cb0;">${tag}</span>`).join('')}
+                </div>
+                `
+            }
+
+            cardNode.innerHTML = format;
+
             gridContainer.appendChild(cardNode);
+
+            if (!isShowModels){
+                return;
+            }
 
             // start the 3D rendering
             const targetCanvas = document.getElementById(`canvas-viewer-${item.id}`) as HTMLCanvasElement;
@@ -259,8 +305,9 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', buildInventoryGrid);
 } else {
     pagesInformation = splitDB(await getItemsInformation()); // Give us pages informations
-    maxPage = pagesInformation.length // give us how many pages present
-    renderCurrentPage() // show the page we are active on based on the page location and split db
+    maxPage = pagesInformation.length; // give us how many pages present
+    showModels();
+    renderCurrentPage(); // show the page we are active on based on the page location and split db
     // TODO: add search bar which over write anything then once empty go back to last page
 
 }
