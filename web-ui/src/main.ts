@@ -6,7 +6,6 @@
 import * as Three from 'three';
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import {String} from "three/examples/jsm/transpiler/AST";
 
 // Define the exact structural typing coming from Flask's /get_stl payload
 interface DBModelItem {
@@ -164,6 +163,54 @@ function showModels() {
 
 }
 
+function howManyModelsShown(): void {
+    const dropdownSection: HTMLElement | null = document.getElementById("showedAmount");
+    if (!dropdownSection) return;
+
+    dropdownSection.innerHTML = '';
+
+    // 1. Dynamically set the 'selected' attribute so the UI matches your TypeScript state
+    let dropFormat : string = `
+        <label for="itemsPerPage">Items per page:</label>
+        <select id="itemsPerPage">
+            <option value="10" ${maxAmount === 10 ? 'selected' : ''}>10</option>
+            <option value="20" ${maxAmount === 20 ? 'selected' : ''}>20</option>
+            <option value="30" ${maxAmount === 30 ? 'selected' : ''}>30</option>
+            <option value="40" ${maxAmount === 40 ? 'selected' : ''}>40</option>
+            <option value="50" ${maxAmount === 50 ? 'selected' : ''}>50</option>
+            <option value="60" ${maxAmount === 60 ? 'selected' : ''}>60</option>
+        </select>
+    `;
+
+    let menu: HTMLDivElement = document.createElement('div');
+    menu.innerHTML = dropFormat;
+    dropdownSection.appendChild(menu);
+
+    // 2. Handle the event
+    dropdownSection.addEventListener('change', async (event: Event) => {
+        const target = event.target as HTMLSelectElement;
+
+        if (target.id === 'itemsPerPage') {
+            // Update the logic state
+            maxAmount = parseInt(target.value, 10);
+
+            // Force the UI to visually hold the new value
+            target.value = maxAmount.toString();
+
+            // Reset pagination
+            currentPage = 0;
+
+            // Re-fetch and re-split based on the new maxAmount
+            const rawDB = await getItemsInformation();
+            pagesInformation = splitDB(rawDB);
+            maxPage = pagesInformation.length;
+
+            // Render the screen
+            renderCurrentPage();
+        }
+    });
+}
+
 
 // --- DB ---
 
@@ -195,8 +242,8 @@ async function getItemsInformation():Promise<DBModelItem[]>{
 
 // --- Pages ---
 function renderCurrentPage(){
-    // TODO use the current location of the index to build the sector
     buildInventory(pagesInformation[currentPage]);
+    howManyModelsShown();
     buildPaginationControls()
 }
 
@@ -230,7 +277,7 @@ function buildPaginationControls(){
             return
         }
         currentPage++;
-        renderCurrentPage(); // TODO: make this function
+        renderCurrentPage();
     }
     paginationContainer.appendChild(nextBtn)
 
