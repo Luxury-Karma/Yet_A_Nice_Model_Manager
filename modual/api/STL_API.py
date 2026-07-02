@@ -11,7 +11,7 @@ from flask import request, Flask, jsonify, send_file
 from flask_cors import CORS
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from modual.sql.session_creator import session_local
-from modual.sql.querry import model
+from modual.sql.querry import model, tag
 from modual.sql.add_models_to_db import sync_directory_pipeline
 from modual.file_finder import find_specific_directory
 
@@ -189,13 +189,44 @@ def locate_directory():
 
 
 
+# In STL_API.py
+@app.route('/get_tags', methods=['GET'])
+def get_tags():
+    """Returns a list of all unique tag names available in the database."""
+    db = session_local()
+    try:
+        tags = db.query(tag).all()
+        return jsonify([t.name for t in tags]), 200
+    finally:
+        db.close()
 
 
+@app.route('/add_tag_to_model', methods=['POST'])
+def add_tag_to_model():
+    """Adds a tag to a model. Creates the tag if it doesn't exist."""
+    data = request.get_json()
+    model_id = data.get('model_id')
+    tag_name = data.get('tag_name')
 
+    db = session_local()
+    try:
+        model_obj = db.query(model).filter(model.id == model_id).first()
+        tag_obj = db.query(tag).filter(tag.name == tag_name).first()
 
+        if not tag_obj:
+            # Create new tag if it doesn't exist
+            tag_obj = tag(name=tag_name)
+            db.add(tag_obj)
+
+        model_obj.tags.append(tag_obj)
+        db.commit()
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db.close()
 
 
 
 if __name__ == '__main__':
-    # Binds to 0.0.0.0 to guarantee local interface connections match up
     app.run(debug=True, host='0.0.0.0', port=5000)

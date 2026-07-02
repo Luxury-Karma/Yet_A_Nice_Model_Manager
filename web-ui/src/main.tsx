@@ -215,6 +215,13 @@ function howManyModelsShown(): void {
 
 // --- DB ---
 
+async function getAllTags():Promise<string[]>{
+        // 1. Fetch available tags to populate autocomplete
+        const response = await fetch('http://127.0.0.1:5000/get_tags');
+        const allTags: string[] = await response.json();
+        return await allTags
+}
+
 function splitDB(dbSplit:DBModelItem[]):DBModelItem[][]{
     // Split STL in groups for performance
         let grouping: DBModelItem[][] = [];
@@ -354,11 +361,12 @@ async function buildInventory(grouping:DBModelItem[]): Promise<void> {
     }
 }
 
-async function getModelMoreInformation(item:DBModelItem): Promise<void>{
-    const informationSection: HTMLElement | null = document.getElementById("moreInformation")
-    if (!informationSection) return
-    informationSection.innerHTML = ''; // Ensure we build above something clean. This one is uniq per model
-    // TODO: make it change to match the model information
+async function getModelMoreInformation(item: DBModelItem): Promise<void> {
+    const informationSection: HTMLElement | null = document.getElementById("moreInformation");
+    if (!informationSection) return;
+
+    informationSection.innerHTML = '';
+
     const format: string = `
         <dialog id="modal-dialog" class="modal">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -382,23 +390,73 @@ async function getModelMoreInformation(item:DBModelItem): Promise<void>{
                 </div>
             </div>
         </dialog>
-`;
+    `;
+
     informationSection.innerHTML = format;
-    const dialog:HTMLDialogElement | null = document.getElementById("modal-dialog") as HTMLDialogElement
-    const closeBtn:HTMLButtonElement | null = document.getElementById("close-modal-btn") as HTMLButtonElement
-    const addTagBtn:HTMLButtonElement | null = document.getElementById("add-tag-btn") as HTMLButtonElement
-    if (!dialog || ! closeBtn || !addTagBtn) return ;
-    console.log("we should have oppen")
+
+    const dialog = document.getElementById("modal-dialog") as HTMLDialogElement;
+    const closeBtn = document.getElementById("close-modal-btn") as HTMLButtonElement;
+    const addTagBtn = document.getElementById("add-tag-btn") as HTMLButtonElement;
+    const tagContainer = document.getElementById("modal-tags") as HTMLElement;
+
+    if (!dialog || !closeBtn || !addTagBtn) return;
+
     dialog.showModal();
+
     closeBtn.onclick = () => {
         dialog.close();
-        informationSection.innerHTML = '' // clear the memory
+        informationSection.innerHTML = '';
     };
 
-    addTagBtn.onclick = () => {
-        return // TODO: add the add tag menu
-    }
+    addTagBtn.onclick = async () => {
+        addTagBtn.style.display = 'none';
 
+        const inputWrapper = document.createElement('span');
+        inputWrapper.innerHTML = `
+            <input list="tag-suggestions" id="tag-input" placeholder="Type or search tags..." 
+                   style="background: #1a1a1e; color: white; border: 1px solid #4299e1; padding: 4px; border-radius: 4px;">
+            <datalist id="tag-suggestions"></datalist>
+        `;
+        tagContainer.appendChild(inputWrapper);
+
+        const input = document.getElementById('tag-input') as HTMLInputElement;
+        const datalist = document.getElementById('tag-suggestions') as HTMLDataListElement;
+
+        const allTags: string[] = await (await fetch('http://127.0.0.1:5000/get_tags')).json();
+        allTags.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            datalist.appendChild(opt);
+        });
+
+        input.focus();
+
+        input.onkeydown = async (e) => {
+            if (e.key === 'Enter') {
+                const tagName = input.value;
+                if (!tagName) return;
+
+                await fetch('http://127.0.0.1:5000/add_tag_to_model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_id: item.id, tag_name: tagName })
+                });
+
+                // 1. Update the local item object so the next render has the new data
+                item.tags.push(tagName);
+
+                // 2. Clear current tags and re-render the list section
+                // We keep the '+' button logic by re-generating the HTML inside the container
+                tagContainer.innerHTML = item.tags.map(tag =>
+                    `<span class="label-tag" style="background-color: #2b6cb0;">${tag}</span>`
+                ).join('') + `<button id="add-tag-btn" class="add-btn">&plus;</button>`;
+
+                // 3. Re-bind the click event to the newly created button
+                const newAddBtn = document.getElementById("add-tag-btn") as HTMLButtonElement;
+                newAddBtn.onclick = addTagBtn.onclick; // Recursive re-binding
+            }
+        };
+    };
 }
 
 pagesInformation = splitDB(await getItemsInformation()); // Give us pages informations
