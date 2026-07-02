@@ -73,6 +73,37 @@ export class ModelViewer {
         this.scene.add(dirLight2);
     }
 
+// Inside your ModelViewer class in main.ts
+public updateSize() {
+    // 1. Get the current size from the DOM element (the canvas)
+    const width = this.canvasElement.clientWidth;
+    const height = this.canvasElement.clientHeight;
+
+    // 2. Update the Three.js renderer to match the new size
+    this.renderer.setSize(width, height);
+
+    // 3. Update the camera aspect ratio so it doesn't distort
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+}
+
+    // Inside your ModelViewer class
+public resize() {
+    // 1. Get the actual size of the canvas element on screen
+    const width = this.canvasElement.clientWidth;
+    const height = this.canvasElement.clientHeight;
+
+    // 2. `Update` the renderer resolution
+    this.renderer.setSize(width, height);
+
+    // 3. Update the camera aspect ratio so the object isn't squashed or offset
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+
+    // 4. Force a re-render
+    this.renderer.render(this.scene, this.camera);
+}
+
     public async loadSTL(modelId: number): Promise<void> {
         try {
             const response = await fetch('http://127.0.0.1:5000/fetch-model', {
@@ -395,19 +426,29 @@ async function getModelMoreInformation(item: DBModelItem): Promise<void> {
     informationSection.innerHTML = format;
 
     const dialog = document.getElementById("modal-dialog") as HTMLDialogElement;
+    const canvas = document.getElementById("modal-canvas") as HTMLCanvasElement;
     const closeBtn = document.getElementById("close-modal-btn") as HTMLButtonElement;
     const addTagBtn = document.getElementById("add-tag-btn") as HTMLButtonElement;
     const tagContainer = document.getElementById("modal-tags") as HTMLElement;
 
-    if (!dialog || !closeBtn || !addTagBtn) return;
+    if (!dialog || !closeBtn || !addTagBtn || !canvas) return;
+
+    // 1. Initialize the 3D Viewer
+
 
     dialog.showModal();
+
+    const viewer = new ModelViewer(canvas);
+    viewer.loadSTL(item.id);
+    viewer.updateSize();
+    (viewer as any).loadSTL(item.id);
 
     closeBtn.onclick = () => {
         dialog.close();
         informationSection.innerHTML = '';
     };
 
+    // 2. Setup the Tagging Logic
     addTagBtn.onclick = async () => {
         addTagBtn.style.display = 'none';
 
@@ -422,7 +463,7 @@ async function getModelMoreInformation(item: DBModelItem): Promise<void> {
         const input = document.getElementById('tag-input') as HTMLInputElement;
         const datalist = document.getElementById('tag-suggestions') as HTMLDataListElement;
 
-        const allTags: string[] = await (await fetch('http://127.0.0.1:5000/get_tags')).json();
+        const allTags: string[] = await getAllTags();
         allTags.forEach(t => {
             const opt = document.createElement('option');
             opt.value = t;
@@ -442,18 +483,14 @@ async function getModelMoreInformation(item: DBModelItem): Promise<void> {
                     body: JSON.stringify({ model_id: item.id, tag_name: tagName })
                 });
 
-                // 1. Update the local item object so the next render has the new data
                 item.tags.push(tagName);
 
-                // 2. Clear current tags and re-render the list section
-                // We keep the '+' button logic by re-generating the HTML inside the container
                 tagContainer.innerHTML = item.tags.map(tag =>
                     `<span class="label-tag" style="background-color: #2b6cb0;">${tag}</span>`
                 ).join('') + `<button id="add-tag-btn" class="add-btn">&plus;</button>`;
 
-                // 3. Re-bind the click event to the newly created button
-                const newAddBtn = document.getElementById("add-tag-btn") as HTMLButtonElement;
-                newAddBtn.onclick = addTagBtn.onclick; // Recursive re-binding
+                // Re-bind the click event to the newly created button
+                document.getElementById("add-tag-btn")!.onclick = addTagBtn.onclick;
             }
         };
     };

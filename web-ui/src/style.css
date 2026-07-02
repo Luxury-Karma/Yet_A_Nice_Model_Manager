@@ -176,7 +176,9 @@ input:checked+.slider:before {transform: translateX(25px);}
 .modal-viewer {
     background-color: #0f0f11;
     border-radius: 6px;
-    height: 450px;
+    /* Increase the size here */
+    height: 600px;
+    width: 100%;
 }
 
 .action-btn {
