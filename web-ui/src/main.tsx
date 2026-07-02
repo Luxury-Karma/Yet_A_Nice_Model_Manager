@@ -146,6 +146,7 @@ export class ModelViewer {
 function showModels() {
     const toggler: HTMLInputElement | null= document.getElementById('mySwitch') as HTMLInputElement;
     if (!toggler){ return; } // container not found
+    toggler.innerHTML = '' // empty it for reload
     // create slider
     toggler.addEventListener('change', (event:Event) => {
        const target:HTMLInputElement = event.target as HTMLInputElement;
@@ -164,10 +165,10 @@ function showModels() {
 }
 
 function howManyModelsShown(): void {
-    const dropdownSection: HTMLElement | null = document.getElementById("showedAmount");
+    const dropdownSection: HTMLElement | null = document.getElementById("settings");
     if (!dropdownSection) return;
-
-    dropdownSection.innerHTML = '';
+    const dropDownItem:HTMLElement | null = document.getElementById("itemsPerPage");
+    if (dropDownItem) return;  // Ensure no duplicate on reloads
 
     // 1. Dynamically set the 'selected' attribute so the UI matches your TypeScript state
     let dropFormat : string = `
@@ -242,8 +243,7 @@ async function getItemsInformation():Promise<DBModelItem[]>{
 
 // --- Pages ---
 function renderCurrentPage(){
-    buildInventory(pagesInformation[currentPage]);
-    howManyModelsShown();
+    buildInventory(pagesInformation[currentPage]).then(_ => {return});
     buildPaginationControls()
 }
 
@@ -286,8 +286,6 @@ function buildPaginationControls(){
 
 // --- INVENTORY ---
 
-
-
 async function buildInventory(grouping:DBModelItem[]): Promise<void> {
     const gridContainer = document.querySelector('#inventory-grid');
     if (!gridContainer) return;
@@ -325,10 +323,20 @@ async function buildInventory(grouping:DBModelItem[]): Promise<void> {
                 `
             }
 
+
             cardNode.innerHTML = format;
+            cardNode.addEventListener( 'click', (e: MouseEvent) => {
+                const target:HTMLElement|null = e.target as HTMLElement;
+                if (target.tagName.toLowerCase() === "canvas"){
+                    return // Let the user control the model. Do nothing
+                }
+                // Todo : Add the ignore for selections as well so we can grab multiple models at once
+                getModelMoreInformation(item)
+                console.log(`You clicked a card: ${item.file_name}. This is good.`);
+            });
 
             gridContainer.appendChild(cardNode);
-
+            // Block the 3D rendering if requested. This can be highly demanding for JS to show
             if (!isShowModels){
                 return;
             }
@@ -346,15 +354,57 @@ async function buildInventory(grouping:DBModelItem[]): Promise<void> {
     }
 }
 
+async function getModelMoreInformation(item:DBModelItem): Promise<void>{
+    const informationSection: HTMLElement | null = document.getElementById("moreInformation")
+    if (!informationSection) return
+    informationSection.innerHTML = ''; // Ensure we build above something clean. This one is uniq per model
+    // TODO: make it change to match the model information
+    const format: string = `
+        <dialog id="modal-dialog" class="modal">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div class="header-info">
+                    <h2 id="model-title" style="margin: 0 0 0.5rem 0;">${item.file_name}</h2>
+                    <div id="modal-tags" class="tag-container" style="margin-bottom: 1rem;">
+                        ${item.tags.map(tag => `<span class="label-tag" style="background-color: #2b6cb0;">${tag}</span>`).join('')}
+                        <button id="add-tag-btn" class="add-btn">&plus;</button>
+                    </div>
+                </div>
+                <button id="close-modal-btn" class="close-btn">&times;</button>    
+            </div>
+            
+            <div class="modal-body">
+                <div class="modal-viewer">
+                    <canvas id="modal-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
+                </div>
+                <div class="modal-details">
+                    <p><strong>Size:</strong> ${(item.file_size / (1024 * 1024)).toFixed(2)} MB</p>
+                    <p><strong>Path:</strong> ${item.file_path}</p>
+                </div>
+            </div>
+        </dialog>
+`;
+    informationSection.innerHTML = format;
+    const dialog:HTMLDialogElement | null = document.getElementById("modal-dialog") as HTMLDialogElement
+    const closeBtn:HTMLButtonElement | null = document.getElementById("close-modal-btn") as HTMLButtonElement
+    const addTagBtn:HTMLButtonElement | null = document.getElementById("add-tag-btn") as HTMLButtonElement
+    if (!dialog || ! closeBtn || !addTagBtn) return ;
+    console.log("we should have oppen")
+    dialog.showModal();
+    closeBtn.onclick = () => {
+        dialog.close();
+        informationSection.innerHTML = '' // clear the memory
+    };
 
-// Attach listener lifecycle initializers
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', buildInventoryGrid);
-} else {
-    pagesInformation = splitDB(await getItemsInformation()); // Give us pages informations
-    maxPage = pagesInformation.length; // give us how many pages present
-    showModels();
-    renderCurrentPage(); // show the page we are active on based on the page location and split db
-    // TODO: add search bar which over write anything then once empty go back to last page
+    addTagBtn.onclick = () => {
+        return // TODO: add the add tag menu
+    }
 
 }
+
+pagesInformation = splitDB(await getItemsInformation()); // Give us pages informations
+maxPage = pagesInformation.length; // give us how many pages present
+showModels();
+howManyModelsShown();
+renderCurrentPage(); // show the page we are active on based on the page location and split db
+// TODO: add search bar which over write anything then once empty go back to last page
+
