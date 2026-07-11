@@ -19,9 +19,13 @@ if not exists(TARGET_DIR):
 
 DB_URL: str = f'sqlite:///{join(TARGET_DIR, "library.db")}'
 
-print(f'🔗 Database file absolute path: {join(TARGET_DIR, "library.db")}')
+tag_DB_URL : str = f'sqlite:///{join(TARGET_DIR, "tag.db")}'
+
+print(f'🔗 Model database file absolute path: {join(TARGET_DIR, "library.db")}')
+print(f'🔗 Tag database file absolute path: {join(TARGET_DIR, "library.db")}')
 
 engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+tag_engine = create_engine(tag_DB_URL, connect_args={"check_same_thread": False})
 
 session_local = sessionmaker(bind=engine)
 

@@ -6,7 +6,7 @@ Handles back-end storage indexing metrics for local 3D assets.
 import os
 import sys
 from datetime import datetime
-
+from sqlalchemy.orm import Session
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from modual.sql.session_creator import engine, session_local, Base
 from modual.sql.querry import model, tag
@@ -30,7 +30,7 @@ def sync_directory_pipeline(target_directory: str) -> dict:
     if not discovered_files:
         return metrics
 
-    db = session_local()
+    db:Session = session_local()
     try:
         # Fetch existing tags to resolve format relations smoothly
         existing_tags = {t.name.lower(): t for t in db.query(tag).all()}
@@ -72,6 +72,8 @@ def sync_directory_pipeline(target_directory: str) -> dict:
                     new_model_record.tags.append(existing_tags[clean_format])
                 elif "miniature" in existing_tags and clean_format in ["stl", "obj"]:
                     new_model_record.tags.append(existing_tags["miniature"])
+
+
 
                 db.add(new_model_record)
                 metrics["added"] += 1
