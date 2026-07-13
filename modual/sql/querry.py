@@ -70,18 +70,13 @@ def get_all_tags() -> list:
 
 
 
-def create_tag(name: str, is_auto: bool = False, rule_type: str = None, rule_value: str = None):
+def create_tag(name: str):
     """
     Creates and saves a new tag to the database.
     """
     db = session_local()
     try:
-        new_tag = tag(
-            name=name,
-            is_auto=is_auto,
-            rule_type=rule_type,
-            rule_value=rule_value
-        )
+        new_tag = tag(name=name)
         db.add(new_tag)
         db.commit()
         db.refresh(new_tag)
@@ -93,10 +88,18 @@ def create_tag(name: str, is_auto: bool = False, rule_type: str = None, rule_val
         db.close()
 
 
-def add_rule_to_tag(tag_id: int, rule_type: str, rule_value: str, is_reverse: bool = False):
+def add_rule_to_tag(tag_name: str, rule_type: str, rule_value: str, is_reverse: bool = False):
+    """
+    adds a rule to the tag with the given name.
+    :param tag_name: name of the tag to be given the rule
+    :param rule_type: type of the rule to be added [ Regex, type, contain, directory ]
+    :param rule_value: what is the value of the rule [ * , "stl", "test", "/C"
+    :param is_reverse: is the rule reversed or not
+    :return: Boolean if rule was successfully added
+    """
     db = session_local()
     try:
-        target_tag = db.query(tag).filter(tag.id == tag_id).first()
+        target_tag = db.query(tag).filter(tag.name == tag_name).first()
         if not target_tag:
             return False
 
@@ -115,6 +118,11 @@ def add_rule_to_tag(tag_id: int, rule_type: str, rule_value: str, is_reverse: bo
 
 
 def remove_rule_to_tag(rule_id: int):
+    """
+    Remove a rule from the tag with the given id.
+    :param rule_id: id of the rule to remove
+    :return: Boolean if rule was successfully removed
+    """
     db = session_local()
     try:
         # 1. Locate the specific rule
@@ -128,11 +136,18 @@ def remove_rule_to_tag(rule_id: int):
     finally:
         db.close()
 
+
 def get_tag_id_by_name(name: str) -> int:
+    """
+    Returns the id of the tag with the given name.
+    :param name: name of the tag
+    :return: id of the tag or -1 if not found
+    """
     db = session_local()
     try:
-        # Search for the tag where the name matches the provided string
         result = db.query(tag).filter(tag.name == name).first()
-        return result.id if result else None
+        if result:
+            return result.id
+        return -1
     finally:
         db.close()
