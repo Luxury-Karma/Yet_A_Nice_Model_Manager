@@ -2,31 +2,45 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from modual.sql.session_creator import engine, session_local, Base
-from modual.sql.querry import tag, create_tag, get_all_tags, add_rule_to_tag, remove_rule_to_tag, get_tag_id_by_name
+from modual.sql.querry import tag, create_tag, get_all_tags, add_rule_to_tag, remove_rule_to_tag, get_tag_id_by_name, \
+    rule, model
 
+import re
 
-def add_tag_condition_db(tag_name:str, rule_type:str, rule_value:str, is_reverse:bool, is_auto:bool):
+def get_all_rules_for_tag(tag_name:str) -> list[rule]:
     """
-    Add a condition to meet inside of the tag DB
-    :param condition: condition to add to a specific tag
-    :return:
+    returns a list of rules belonging to a tag
+    :param tag_name: name of the tag
+    :return: list of rules
     """
     db = session_local()
+    return db.query(tag).filter(tag.tag_name == tag_name).all()
 
-    if tag_name not in get_all_tags():
-        # tag does not exist lets create it
-        create_tag(name=tag_name, rule_type=rule_type, rule_value=rule_value, is_auto=is_auto)
-
-
-    add_rule_to_tag(tag_name, rule_type, rule_value, is_reverse)
-
-
-
-def remove_condition_db(rule_id: int):
+def make_rule_to_action(rule_id:int, tag_name:str, model_evaluated:model ) -> bool:
     """
-    Remove a condition to meet inside of the tag DB
-    :param condition: condition to remove to a specific tag
-    :return:
+    Take a rule from the DB, convert it to a python condition.
+    then test the rule on a model's information and return if the
+    tag belong
+
+    :param rule_id: rule to test
+    :return: Boolean of whether the rule belongs
     """
-    # TODO : instead send the tag id over network when removed will be easier
-    remove_rule_to_tag(rule_id)
+
+    db = session_local()
+    r:rule = db.query(rule).filter(rule.id == rule_id).first()
+    name:tag = db.query(tag).filter(tag.tag_name == tag_name).first()
+    match str(r.type).lower():
+        case "regex":
+            if not re.match(r.value, name.name):
+                return False
+        case "contain":
+            if r.value not in name.name:
+                return False
+        case "type":
+            # TODO : add the model type the type of the file inside of the DB
+            if model_evaluated.
+        case _:
+            print("not a valid format")
+            return False
+
+    return True

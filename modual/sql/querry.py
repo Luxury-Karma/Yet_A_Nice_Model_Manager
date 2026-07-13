@@ -41,8 +41,6 @@ class tag(Base):
     __tablename__ = "tags"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    is_auto = Column(Boolean, default=False)
-
     # Relationship: One tag -> Many rules
     rules = relationship("rule", back_populates="tag", cascade="all, delete-orphan")
 
