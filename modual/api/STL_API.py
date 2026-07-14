@@ -218,7 +218,7 @@ def add_tag_to_model():
             tag_obj = tag(name=tag_name)
             db.add(tag_obj)
 
-        model_obj.tags.append(tag_obj)
+        db.refresh(model_obj.tags.append(tag_obj))
         db.commit()
         return jsonify({'success': True}), 200
     except Exception as e:

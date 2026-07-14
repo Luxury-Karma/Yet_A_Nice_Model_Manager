@@ -16,14 +16,14 @@ def get_all_rules_for_tag(tag_name:str) -> list[rule]:
     db = session_local()
     return db.query(tag).filter(tag.tag_name == tag_name).all()
 
+# TODO: We should also allowed search on every information from a model insted. Or maybe add an advance search
 def make_rule_to_action(rule_id:int, tag_name:str, model_evaluated:model ) -> bool:
     """
-    Take a rule from the DB, convert it to a python condition.
-    then test the rule on a model's information and return if the
-    tag belong
-
-    :param rule_id: rule to test
-    :return: Boolean of whether the rule belongs
+    Take the rules from the DB make them in python, then action them
+    :param rule_id: id of the rule
+    :param tag_name: name of the tag
+    :param model_evaluated: model evaluated
+    :return:
     """
 
     db = session_local()
@@ -38,9 +38,38 @@ def make_rule_to_action(rule_id:int, tag_name:str, model_evaluated:model ) -> bo
                 return False
         case "type":
             # TODO : add the model type the type of the file inside of the DB
-            if model_evaluated.
+            if model_evaluated.type != r.value:
+                return False
+        case "directory":
+            if r.value in model_evaluated.director :
+                return False
         case _:
             print("not a valid format")
             return False
 
     return True
+
+def test_all_models_on_tags() -> dict[str,int]:
+    """
+    Update all models to apply a rule
+    :return:
+    """
+    db = session_local()
+    model_updated:dict = {}
+    try:
+        for m in db.query(model).all():
+            for t in db.query(tag).all():
+
+                if t in m.tags:
+                    continue
+
+                for r in get_all_rules_for_tag(t.tag_name):
+                    if not  make_rule_to_action(r.id, t.name, m):
+                        continue
+                    m.tags.append(t)
+                    db.refresh(m)
+                    db.commit()  # TODO: verify if commiting every time is slower then once
+                    model_updated[t.name] = model_updated[t.name] + 1 if model_updated.keys().__contains__(t.name) else 1
+    finally:
+        db.close()
+    return model_updated

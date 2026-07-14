@@ -29,6 +29,7 @@ class model(Base):
     date_created = Column(DateTime, nullable=False)
     date_modified = Column(DateTime, nullable=False)
     date_added = Column(DateTime, nullable=False)
+    file_type = Column(String, nullable=False)  # TODO: add this to the creation of the object
     # model information
     dimension_x = Column(Integer, nullable=False)  # TODO: need to ensure its always either in imperial or metric. Not both
     dimension_y = Column(Integer, nullable=False)  # probably by using some conversion unit or verifying.
@@ -56,6 +57,7 @@ class rule(Base):
 
     tag = relationship("tag", back_populates="rules")
 
+# region : helper
 def get_all_tags() -> list:
     """Returns a list of all tag objects from
     the database."""
@@ -65,7 +67,6 @@ def get_all_tags() -> list:
         return all_tags
     finally:
         db.close()
-
 
 
 def create_tag(name: str):
@@ -149,3 +150,6 @@ def get_tag_id_by_name(name: str) -> int:
         return -1
     finally:
         db.close()
+
+
+# endregion
