@@ -37,11 +37,10 @@ def make_rule_to_action(rule_id:int, tag_name:str, model_evaluated:model ) -> bo
             if r.value not in name.name:
                 return False
         case "type":
-            # TODO : add the model type the type of the file inside of the DB
-            if model_evaluated.type != r.value:
+            if str(model_evaluated.type).lower() != str(r.value).lower():
                 return False
         case "directory":
-            if r.value in model_evaluated.director :
+            if r.value in model_evaluated.file_path :
                 return False
         case _:
             print("not a valid format")

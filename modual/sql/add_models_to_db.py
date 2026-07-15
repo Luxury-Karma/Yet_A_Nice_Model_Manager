@@ -58,6 +58,7 @@ def sync_directory_pipeline(target_directory: str) -> dict:
                     file_name=os.path.basename(file_path),
                     file_path=file_path,
                     file_size=file_size_bytes,
+                    type=detected_format,
                     date_created=time_created,
                     date_modified=time_modified,
                     date_added=datetime.now(),

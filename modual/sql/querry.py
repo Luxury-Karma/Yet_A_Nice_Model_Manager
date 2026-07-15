@@ -9,7 +9,6 @@ from sqlalchemy.orm import relationship
 from modual.sql.session_creator import Base
 from sqlalchemy.orm import Session
 from modual.sql.session_creator import session_local
-from modual.sql.querry import tag
 
 
 model_tags = Table(
@@ -44,6 +43,7 @@ class tag(Base):
     name = Column(String, nullable=False)
     # Relationship: One tag -> Many rules
     rules = relationship("rule", back_populates="tag", cascade="all, delete-orphan")
+    models = relationship("model", secondary=model_tags, back_populates="tags")
 
 class rule(Base):
     __tablename__ = "rules"
