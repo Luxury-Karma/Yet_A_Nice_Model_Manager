@@ -36,6 +36,7 @@ def sync_directory_pipeline(target_directory: str) -> dict:
         existing_tags = {t.name.lower(): t for t in db.query(tag).all()}
 
         for file_path, detected_format in discovered_files.items():
+            print(detected_format, file_path)
             try:
                 # Deduplication check
                 is_duplicate = db.query(model).filter(model.file_path == file_path).first()
@@ -58,11 +59,11 @@ def sync_directory_pipeline(target_directory: str) -> dict:
                     file_name=os.path.basename(file_path),
                     file_path=file_path,
                     file_size=file_size_bytes,
-                    type=detected_format,
+                    file_type=detected_format,
                     date_created=time_created,
                     date_modified=time_modified,
                     date_added=datetime.now(),
-                    dimension_x=0,
+                    dimension_x=0,  # TODO : find out this later on
                     dimension_y=0,
                     dimension_z=0
                 )
@@ -79,7 +80,8 @@ def sync_directory_pipeline(target_directory: str) -> dict:
                 db.add(new_model_record)
                 metrics["added"] += 1
 
-            except Exception:
+            except Exception as e:
+                print(e)
                 metrics["failed"] += 1
                 continue
 

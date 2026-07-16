@@ -20,7 +20,7 @@ let currentPage: number = 0;
 let maxPage : number = 0;
 let maxAmount:number = 20;
 let pagesInformation: DBModelItem[][]
-let isShowModels: boolean = false;  // TODO make a user setting files and load it first
+let isShowModels: boolean = false;
 
 export class ModelViewer {
     private scene!: Three.Scene;
@@ -278,6 +278,49 @@ async function getItemsInformation():Promise<DBModelItem[]>{
 
         return  await response.json();
 }
+
+// --- Add this somewhere in main.ts ---
+
+function setupQuickAdd(): void {
+    const addBtn = document.getElementById('quick-add-btn') as HTMLButtonElement | null;
+    if (!addBtn) return;
+
+    addBtn.addEventListener('click', async () => {
+        // 1. Ask the user for the local absolute path
+        const directoryPath = window.prompt("Enter the absolute path to your STL folder (e.g., D:\\wh40k\\Shoulder_Pads):");
+
+        // 2. Cancel if the user hits escape or leaves it blank
+        if (!directoryPath || directoryPath.trim() === '') {
+            return;
+        }
+
+        try {
+            // 3. Send the path to your existing local Flask backend
+            const response = await fetch('http://127.0.0.1:5000/find_stl', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ directory_path: directoryPath.trim() })
+            });
+
+            // 4. Handle the response
+            if (response.status === 202) {
+                alert(`Scan initiated!\n\nThe backend is currently crawling: ${directoryPath}\nRefresh the page in a few moments to see the new models.`);
+            } else {
+                const errorData = await response.json();
+                alert(`Failed to start scan: ${errorData.error}`);
+            }
+        } catch (error) {
+            console.error("Error communicating with backend:", error);
+            alert("Failed to connect to the backend API. Is Flask running?");
+        }
+    });
+}
+
+// Don't forget to call it at the bottom of your file where you initialize everything else!
+setupQuickAdd();
+
 
 // --- Pages ---
 function renderCurrentPage(){

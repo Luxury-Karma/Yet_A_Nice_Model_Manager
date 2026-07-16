@@ -30,9 +30,9 @@ class model(Base):
     date_added = Column(DateTime, nullable=False)
     file_type = Column(String, nullable=False)  # TODO: add this to the creation of the object
     # model information
-    dimension_x = Column(Integer, nullable=False)  # TODO: need to ensure its always either in imperial or metric. Not both
-    dimension_y = Column(Integer, nullable=False)  # probably by using some conversion unit or verifying.
-    dimension_z = Column(Integer, nullable=False)  # I have not yet look how they look
+    dimension_x = Column(Integer, nullable=True)  # TODO: need to ensure its always either in imperial or metric. Not both
+    dimension_y = Column(Integer, nullable=True)  # probably by using some conversion unit or verifying.
+    dimension_z = Column(Integer, nullable=True)  # I have not yet look how they look
     # tags information
     tags = relationship("tag", secondary=model_tags, back_populates="models")
 

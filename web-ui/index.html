@@ -8,15 +8,20 @@
 </head>
 <body>
     <header>
-        <h1>3D Print Library</h1>
-        <div id="settings">
-            <label class="switch">
-                <input type="checkbox" id="mySwitch">
-                <span class="slider"></span>
-            </label>
-            <div id="showedAmount"></div>
-        </div>
-    </header>
+    <h1>3D Print Library</h1>
+    <div id="settings" style="display: flex; gap: 15px; align-items: center;">
+
+        <button id="quick-add-btn" style="background: #2b6cb0; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+            &plus; Add Directory
+        </button>
+
+        <label class="switch">
+            <input type="checkbox" id="mySwitch">
+            <span class="slider"></span>
+        </label>
+        <div id="showedAmount"></div>
+    </div>
+</header>
 
     <main id="inventory-grid"></main>
     <div id="pagination-controls" style="text-align: center; padding: 20px; margin-top: 20px"></div>
