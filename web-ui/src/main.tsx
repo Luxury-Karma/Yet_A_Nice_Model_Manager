@@ -6,6 +6,8 @@
 import * as Three from 'three';
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import {dropZone} from './moduals/dragAndDrop.ts';
+
 
 // Define the exact structural typing coming from Flask's /get_stl payload
 interface DBModelItem {
@@ -279,7 +281,7 @@ async function getItemsInformation():Promise<DBModelItem[]>{
         return  await response.json();
 }
 
-// --- Add this somewhere in main.ts ---
+// --- add models  ---
 
 function setupQuickAdd(): void {
     const addBtn = document.getElementById('quick-add-btn') as HTMLButtonElement | null;
@@ -545,4 +547,4 @@ showModels();
 howManyModelsShown();
 renderCurrentPage(); // show the page we are active on based on the page location and split db
 // TODO: add search bar which over write anything then once empty go back to last page
-
+dropZone();
